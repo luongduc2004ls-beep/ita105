@@ -1,0 +1,54 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+df = pd.read_csv("data.csv")
+
+# Mean
+print(df.mean(numeric_only=True))
+
+# Median
+print(df.median(numeric_only=True))
+
+# Min, Max
+print(df.min(numeric_only=True))
+print(df.max(numeric_only=True))
+
+# Std
+print(df.std(numeric_only=True))
+missing_values = df.isnull().sum()
+print(missing_values)
+duplicate = df.duplicated().sum()
+print(duplicate)
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Histogram
+df['gia'].hist()
+plt.show()
+
+# Boxplot
+sns.boxplot(x=df['gia'])
+plt.show()
+
+# Violin plot
+sns.violinplot(x=df['so_phong'], y=df['gia'])
+plt.show()
+#category
+print(df['quan'].value_counts())
+#text
+df['mo_ta_len'] = df['mo_ta'].str.len()
+print(df['mo_ta_len'].describe())
+# Numerical
+df['gia'] = df['gia'].fillna(df['gia'].median())
+
+# Categorical
+df['quan'] = df['quan'].fillna(df['quan'].mode()[0])
+# Giá âm
+df = df[df['gia'] > 0]
+
+# Số phòng = 0
+df = df[df['so_phong'] > 0]
+df['quan'] = df['quan'].str.lower().str.strip()
+df = df.drop_duplicates()
