@@ -1,0 +1,111 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+df = pd.read_csv("data.csv")
+
+# Mean
+print(df.mean(numeric_only=True))
+
+# Median
+print(df.median(numeric_only=True))
+
+# Min, Max
+print(df.min(numeric_only=True))
+print(df.max(numeric_only=True))
+
+# Std
+print(df.std(numeric_only=True))
+missing_values = df.isnull().sum()
+print(missing_values)
+duplicate = df.duplicated().sum()
+print(duplicate)
+
+# Histogram
+df['gia'].hist()
+plt.show()
+
+# Boxplot
+sns.boxplot(x=df['gia'])
+plt.show()
+
+# Violin plot
+sns.violinplot(x=df['so_phong'], y=df['gia'])
+plt.show()
+#category
+print(df['quan'].value_counts())
+#text
+df['mo_ta_len'] = df['mo_ta'].str.len()
+print(df['mo_ta_len'].describe())
+# Numerical
+df['gia'] = df['gia'].fillna(df['gia'].median())
+
+# Categorical
+df['quan'] = df['quan'].fillna(df['quan'].mode()[0])
+# Giá âm
+df = df[df['gia'] > 0]
+
+# Số phòng = 0
+df = df[df['so_phong'] > 0]
+df['quan'] = df['quan'].str.lower().str.strip()
+df = df.drop_duplicates()
+
+# IQR
+Q1 = df['gia'].quantile(0.25)
+Q3 = df['gia'].quantile(0.75)
+IQR = Q3 - Q1
+
+outliers_iqr = df[(df['gia'] < Q1 - 1.5 * IQR) | (df['gia'] > Q3 + 1.5 * IQR)]
+print("Outliers (IQR):", len(outliers_iqr))
+
+# Loại bỏ outlier theo IQR
+df = df[(df['gia'] >= Q1 - 1.5 * IQR) & (df['gia'] <= Q3 + 1.5 * IQR)]
+
+# Z-score
+z = (df['gia'] - df['gia'].mean()) / df['gia'].std()
+outliers_z = df[np.abs(z) > 3]
+print("Outliers (Z-score):", len(outliers_z))
+
+# Loại bỏ theo Z-score
+df = df[np.abs(z) < 3]
+
+
+
+from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
+
+# Scaling
+scaler = MinMaxScaler()
+df['gia_minmax'] = scaler.fit_transform(df[['gia']])
+
+scaler_std = StandardScaler()
+df['gia_zscore'] = scaler_std.fit_transform(df[['gia']])
+
+# Label Encoding
+le = LabelEncoder()
+df['quan_label'] = le.fit_transform(df['quan'])
+
+# One-hot Encoding
+df = pd.get_dummies(df, columns=['quan'])
+
+# TF-IDF cho text
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+tfidf = TfidfVectorizer(max_features=100)
+tfidf_matrix = tfidf.fit_transform(df['mo_ta'])
+
+
+
+from sklearn.metrics.pairwise import cosine_similarity
+
+cos_sim = cosine_similarity(tfidf_matrix)
+
+duplicates_text = []
+
+for i in range(len(cos_sim)):
+    for j in range(i+1, len(cos_sim)):
+        if cos_sim[i][j] > 0.8:
+            duplicates_text.append((i, j))
+
+print("Possible duplicate (text similarity):")
+print(duplicates_text)
