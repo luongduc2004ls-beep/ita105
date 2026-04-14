@@ -1,0 +1,112 @@
+#========================================================
+# bài 1 Xây dựng Pipeline tổng quát cho dữ liệu đa dạng
+#========================================================
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder, FunctionTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+import joblib
+
+# Load dữ liệu
+df = pd.read_csv('ITA105_Lab_8.csv')
+
+# Tách features và target
+X = df.drop(columns=['SalePrice', 'ImagePath']) # Bỏ ImagePath vì không dùng trong model cơ bản
+y = df['SalePrice']
+
+# Xử lý cột ngày tháng (Time Series) trước khi đưa vào pipeline
+def extract_date_features(df):
+    df = df.copy()
+    df['SaleDate'] = pd.to_datetime(df['SaleDate'])
+    df['SaleMonth'] = df['SaleDate'].dt.month
+    df['SaleQuarter'] = df['SaleDate'].dt.quarter
+    return df.drop(columns=['SaleDate'])
+
+# 1. Nhóm các cột
+numeric_features = ['LotArea', 'Rooms', 'NoiseFeature']
+categorical_features = ['Neighborhood', 'Condition', 'HasGarage']
+text_feature = 'Description'
+
+# 2. Xây dựng transformer cho từng loại
+numeric_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='median')),
+    ('scaler', StandardScaler())
+])
+
+categorical_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='constant', fill_value='missing')),
+    ('onehot', OneHotEncoder(handle_unknown='ignore'))
+])
+
+# 3. Kết hợp vào ColumnTransformer
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', numeric_transformer, numeric_features),
+        ('cat', categorical_transformer, categorical_features),
+        ('text', TfidfVectorizer(stop_words='english', max_features=50), text_feature)
+    ]
+)
+
+# Pipeline tổng hợp (Smoke test với 10 dòng)
+full_pipeline = Pipeline(steps=[('preprocessor', preprocessor)])
+demo_data = X.head(10)
+output_demo = full_pipeline.fit_transform(demo_data)
+print(f"Shape sau pipeline: {output_demo.shape}")
+#========================================================
+# bài 2 Kiểm thử Pipeline & Kiểm định chất lượng dữ liệu
+#========================================================
+# Tạo dữ liệu giả lập có category mới và missing
+test_data = X.iloc[0:5].copy()
+test_data.loc[0, 'Neighborhood'] = 'New_Zone' # Unseen category
+test_data.loc[1, 'LotArea'] = np.nan           # Missing value
+
+try:
+    processed_test = full_pipeline.transform(test_data)
+    print("Kiểm thử thành công: Pipeline xử lý được dữ liệu lỗi/mới.")
+except Exception as e:
+    print(f"Lỗi: {e}")
+#========================================================
+# bài 3 Tích hợp pipeline vào mô hình dự báo
+#========================================================
+# Tách tập train/test
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Pipeline với Random Forest
+rf_pipeline = Pipeline(steps=[
+    ('preprocessor', preprocessor),
+    ('regressor', RandomForestRegressor(n_estimators=100, random_state=42))
+])
+
+# Chạy 5-fold Cross-validation
+cv_scores = cross_val_score(rf_pipeline, X_train, y_train, cv=5, scoring='r2')
+
+print(f"R2 Scores giữa các folds: {cv_scores}")
+print(f"R2 trung bình: {cv_scores.mean():.4f}")
+
+# Train model cuối cùng
+rf_pipeline.fit(X_train, y_train)
+
+#========================================================
+# bài 4 Triển khai pipeline thành sản phẩm cho dự báo thực tế.
+#========================================================
+# 1. Lưu pipeline
+joblib.dump(rf_pipeline, 'house_price_pipeline.pkl')
+
+# 2. Hàm dự báo thực tế
+def predict_price(new_data_path):
+    model = joblib.load('house_price_pipeline.pkl')
+    new_data = pd.read_csv(new_data_path)
+    # Lấy các cột cần thiết
+    predictions = model.predict(new_data)
+    return predictions
+
+# Lưu kết quả test
+y_pred = rf_pipeline.predict(X_test)
+print(f"RMSE: {np.sqrt(mean_squared_error(y_test, y_pred)):.2f}")
